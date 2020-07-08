@@ -6,6 +6,7 @@ const dgram = require('dgram')
 const server = dgram.createSocket('udp4')
 const AudioMixer = require('audio-mixer')
 const {Readable} = require('stream')
+const fs = require('fs')
 
 let encoders = {}
 let mixer = new AudioMixer.Mixer({
@@ -30,21 +31,33 @@ let createReadable = () => {
     return readable
 }
 
+let ct = (obj) => {
+    var size = 0, key;
+    for (key in obj) {
+        if (obj.hasOwnProperty(key)) size++;
+    }
+    return size;
+};
 let processPckt = (buf) => {
+
     let readPos = 0
     
     let id64 = buf.readBigInt64LE(readPos)
     readPos += 8
-    
+
     if(!encoders[id64]) {
-        encoders[id64] = {encoder:new OpusEncoder(24000, 1), stream:createReadable()}
-        encoders[id64].stream.pipe(createInput())
+        let input = createInput()
+        encoders[id64] = {encoder:new OpusEncoder(24000, 1), stream:createReadable(), mix:input}
+        encoders[id64].stream.pipe(input)
+        encoders[id64].time = Date.now()/1000
     }
     
     let readable = encoders[id64].stream
     let encoder = encoders[id64].encoder
-    console.log(`Packet header decoded from steamid64 ${id64}`)
+    console.log(`Packet header decoded from steamid64 ${id64}. LEN: ${buf.length}`)
     
+    fs.writeFileSync('pck.dat', buf)
+
     const maxRead = buf.length
     let frames = []
 
@@ -54,6 +67,13 @@ let processPckt = (buf) => {
         
         let seq = buf.readUInt16LE(readPos)
         readPos += 2
+        //console.log(`Frame init: ${len}, ${seq}`)
+        if(len <= 0 || seq < 0 || len > 1000 || seq > 2000) { 
+            //I'm probably bad at math somewhere. 
+            //This works for now to prevent segfaults at least
+            console.log(`Invalid packet LEN: ${len}, SEQ: ${seq}`)
+            return
+        }
 
         const data = buf.slice(readPos, readPos + len)
         readPos += len
@@ -64,6 +84,22 @@ let processPckt = (buf) => {
     let decompressedData = Buffer.concat(frames)
     readable.push(decompressedData)
 }
+
+let gcEncoders = () => {
+    let curtime = Date.now()/1000
+    Object.keys(encoders).forEach(function (k) { 
+        let encoderData = encoders[k]
+        if(encoderData.time + 15 < curtime) {
+            mixer.removeInput(encoders[k].mix)
+            delete encoders[k].stream
+            delete encoders[k].encoder
+            delete encoders[k].mix
+            delete encoders[k]
+            console.log('gc')
+        }
+    })
+}
+setInterval(gcEncoders, 5000)
 
 let playOpusStream = (t, stream, options, streams = {}) => {
     t.destroyDispatcher()
@@ -94,8 +130,6 @@ server.on('error', (err) => {
 })
 
 server.on('message', (msg, rinfo) => {
-    console.log(`Voice msg from ${rinfo.address}:${rinfo.port}`)
-
     try {
         processPckt(msg)
     } catch(e) {
