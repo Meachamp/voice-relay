@@ -1,0 +1,13 @@
+version: '3'
+services:  
+  node:
+    image: node:14-stretch
+    volumes:
+      - .:/data
+    command: bash -c 'cd /data && node /data/server.js'
+    restart: always
+    ports:
+      - 127.0.0.1:4000:4000/udp
+    environment:
+      DISCORD_TOKEN: 
+      CHANNEL_ID: 
