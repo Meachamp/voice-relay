@@ -56,8 +56,6 @@ let processPckt = (buf) => {
     let encoder = encoders[id64].encoder
     console.log(`Packet header decoded from steamid64 ${id64}. LEN: ${buf.length}`)
     
-    fs.writeFileSync('pck.dat', buf)
-
     const maxRead = buf.length
     let frames = []
 
@@ -95,7 +93,6 @@ let gcEncoders = () => {
             delete encoders[k].encoder
             delete encoders[k].mix
             delete encoders[k]
-            console.log('gc')
         }
     })
 }
