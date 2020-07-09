@@ -31,15 +31,41 @@ let createReadable = () => {
     return readable
 }
 
-let ct = (obj) => {
-    var size = 0, key;
-    for (key in obj) {
-        if (obj.hasOwnProperty(key)) size++;
-    }
-    return size;
-};
-let processPckt = (buf) => {
+const opcodes = {
+    OP_CODEC_OPUSPLC: 6,
+    OP_SAMPLERATE: 11,
+    OP_SILENCE: 0
+}
 
+let decodeOpusFrames = (buf, readable, encoder) => {
+    const maxRead = buf.length
+    let readPos = 0
+    let frames = []
+
+    while(readPos < maxRead - 4) {
+        let len = buf.readUInt16LE(readPos)
+        readPos += 2
+        
+        let seq = buf.readUInt16LE(readPos)
+        readPos += 2
+        
+        if(len <= 0 || seq < 0 || readPos + len > maxRead) { 
+            console.log(`Invalid packet LEN: ${len}, SEQ: ${seq}`)
+            fs.writeFileSync('pckt_corr.dat', buf)
+            return
+        }
+
+        const data = buf.slice(readPos, readPos + len)
+        readPos += len
+
+        frames.push(encoder.decode(data))
+    }
+
+    let decompressedData = Buffer.concat(frames)
+    readable.push(decompressedData)
+}
+
+let processPckt = (buf) => {
     let readPos = 0
     
     let id64 = buf.readBigInt64LE(readPos)
@@ -56,31 +82,36 @@ let processPckt = (buf) => {
     let encoder = encoders[id64].encoder
     console.log(`Packet header decoded from steamid64 ${id64}. LEN: ${buf.length}`)
     
-    const maxRead = buf.length
-    let frames = []
+    const maxRead = buf.length - 4
 
-    while(readPos < maxRead - 4) {
-        let len = buf.readUInt16LE(readPos)
-        readPos += 2
-        
-        let seq = buf.readUInt16LE(readPos)
-        readPos += 2
-        //console.log(`Frame init: ${len}, ${seq}`)
-        if(len <= 0 || seq < 0 || len > 1000 || seq > 2000) { 
-            //I'm probably bad at math somewhere. 
-            //This works for now to prevent segfaults at least
-            console.log(`Invalid packet LEN: ${len}, SEQ: ${seq}`)
-            return
-        }
-
-        const data = buf.slice(readPos, readPos + len)
-        readPos += len
-
-        frames.push(encoder.decode(data))
+    while(readPos < maxRead - 1) {
+        let op = buf.readUInt8(readPos)
+		readPos++
+		
+		switch(op) {
+		case opcodes.OP_SAMPLERATE:
+            let sampleRate = buf.readUInt16LE(readPos)
+            readPos += 2
+            console.log(`Decoded OP_SAMPLERATE: ${sampleRate}`)
+            break;
+		case opcodes.OP_SILENCE:
+            let samples = buf.readUInt16LE(readPos)
+            readPos += 2;
+            console.log(`Got ${samples} silence samples`)
+            break;
+        case opcodes.OP_CODEC_OPUSPLC:
+            let dataLen = buf.readUInt16LE(readPos)
+            readPos += 2;
+            console.log(`Decoded OP_CODEC_OPUSPLC: ${dataLen}`)
+            decodeOpusFrames(buf.slice(readPos, readPos + dataLen), readable, encoder)
+            readPos += dataLen
+            break;
+		default:
+			console.log(`ERR: Unhandled opcode ${op}`)
+			fs.writeFileSync('pckt_undl', buf)
+			break;
+		}
     }
-
-    let decompressedData = Buffer.concat(frames)
-    readable.push(decompressedData)
 }
 
 let gcEncoders = () => {
