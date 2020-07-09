@@ -31,6 +31,7 @@ let createReadable = () => {
     return readable
 }
 
+
 const opcodes = {
     OP_CODEC_OPUSPLC: 6,
     OP_SAMPLERATE: 11,
@@ -75,9 +76,8 @@ let processPckt = (buf) => {
         let input = createInput()
         encoders[id64] = {encoder:new OpusEncoder(24000, 1), stream:createReadable(), mix:input}
         encoders[id64].stream.pipe(input)
-        encoders[id64].time = Date.now()/1000
     }
-    
+    encoders[id64].time = Date.now()/1000
     let readable = encoders[id64].stream
     let encoder = encoders[id64].encoder
     console.log(`Packet header decoded from steamid64 ${id64}. LEN: ${buf.length}`)
@@ -118,7 +118,7 @@ let gcEncoders = () => {
     let curtime = Date.now()/1000
     Object.keys(encoders).forEach(function (k) { 
         let encoderData = encoders[k]
-        if(encoderData.time + 15 < curtime) {
+        if(encoderData.time + 5 < curtime) {
             mixer.removeInput(encoders[k].mix)
             delete encoders[k].stream
             delete encoders[k].encoder
