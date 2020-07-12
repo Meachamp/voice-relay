@@ -31,6 +31,10 @@ let createReadable = () => {
     return readable
 }
 
+let getEncoder = () => {
+    return new OpusEncoder(24000, 1)
+}
+
 
 const opcodes = {
     OP_CODEC_OPUSPLC: 6,
@@ -38,10 +42,13 @@ const opcodes = {
     OP_SILENCE: 0
 }
 
-let decodeOpusFrames = (buf, readable, encoder) => {
+let decodeOpusFrames = (buf, encoderState, id64) => {
     const maxRead = buf.length
     let readPos = 0
     let frames = []
+
+    let readable = encoderState.stream
+    let encoder = encoderState.encoder
 
     while(readPos < maxRead - 4) {
         let len = buf.readUInt16LE(readPos)
@@ -49,6 +56,28 @@ let decodeOpusFrames = (buf, readable, encoder) => {
         
         let seq = buf.readUInt16LE(readPos)
         readPos += 2
+
+        if(!encoderState.seq) {
+            encoderState.seq = seq
+        }
+
+        if(seq < encoderState.seq) {
+            encoderState.encoder = getEncoder()
+            encoderState.seq = 0
+        }
+        else if(encoderState.seq != seq) {
+            console.log(`Sequence mismatch: ${encoderState.seq}, ${seq}, ${id64}`)
+            encoderState.seq = seq
+
+            let lostFrames = Math.min(seq - encoderState.seq, 16)
+
+            for(let i = 0; i < lostFrames; i++) {
+                frames.push(encoder.decodePacketloss())
+            }
+
+        }
+
+        encoderState.seq++;
         
         if(len <= 0 || seq < 0 || readPos + len > maxRead) { 
             console.log(`Invalid packet LEN: ${len}, SEQ: ${seq}`)
@@ -59,28 +88,34 @@ let decodeOpusFrames = (buf, readable, encoder) => {
         const data = buf.slice(readPos, readPos + len)
         readPos += len
 
-        frames.push(encoder.decode(data))
+        let decodedFrame = encoder.decode(data)
+
+        frames.push(decodedFrame)
     }
 
     let decompressedData = Buffer.concat(frames)
     readable.push(decompressedData)
 }
 
+let i = 0
 let processPckt = (buf) => {
     let readPos = 0
     
     let id64 = buf.readBigInt64LE(readPos)
     readPos += 8
 
+    /*if(id64 == n) {
+        i++
+        fs.writeFileSync('data/pckt_'+i+'.dat', buf)
+    }*/
+
     if(!encoders[id64]) {
         let input = createInput()
-        encoders[id64] = {encoder:new OpusEncoder(24000, 1), stream:createReadable(), mix:input}
+        encoders[id64] = {encoder:getEncoder(), stream:createReadable(), input:input}
         encoders[id64].stream.pipe(input)
     }
     encoders[id64].time = Date.now()/1000
-    let readable = encoders[id64].stream
-    let encoder = encoders[id64].encoder
-    console.log(`Packet header decoded from steamid64 ${id64}. LEN: ${buf.length}`)
+   // console.log(`Packet header decoded from steamid64 ${id64}. LEN: ${buf.length}`)
     
     const maxRead = buf.length - 4
 
@@ -92,7 +127,7 @@ let processPckt = (buf) => {
 		case opcodes.OP_SAMPLERATE:
             let sampleRate = buf.readUInt16LE(readPos)
             readPos += 2
-            console.log(`Decoded OP_SAMPLERATE: ${sampleRate}`)
+           // console.log(`Decoded OP_SAMPLERATE: ${sampleRate}`)
             break;
 		case opcodes.OP_SILENCE:
             let samples = buf.readUInt16LE(readPos)
@@ -102,8 +137,8 @@ let processPckt = (buf) => {
         case opcodes.OP_CODEC_OPUSPLC:
             let dataLen = buf.readUInt16LE(readPos)
             readPos += 2;
-            console.log(`Decoded OP_CODEC_OPUSPLC: ${dataLen}`)
-            decodeOpusFrames(buf.slice(readPos, readPos + dataLen), readable, encoder)
+            //console.log(`Decoded OP_CODEC_OPUSPLC: ${dataLen}`)
+            decodeOpusFrames(buf.slice(readPos, readPos + dataLen), encoders[id64], id64)
             readPos += dataLen
             break;
 		default:
@@ -119,10 +154,7 @@ let gcEncoders = () => {
     Object.keys(encoders).forEach(function (k) { 
         let encoderData = encoders[k]
         if(encoderData.time + 5 < curtime) {
-            mixer.removeInput(encoders[k].mix)
-            delete encoders[k].stream
-            delete encoders[k].encoder
-            delete encoders[k].mix
+            mixer.removeInput(encoders[k].input)
             delete encoders[k]
         }
     })
