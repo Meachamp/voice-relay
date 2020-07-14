@@ -62,6 +62,9 @@ let decodeOpusFrames = (buf, encoderState, id64) => {
         }
 
         if(seq < encoderState.seq) {
+            if(seq != 0) {
+                console.log(`Out of Order seq: ${encoderState.seq}, ${seq}, ${id64}`)
+            }
             encoderState.encoder = getEncoder()
             encoderState.seq = 0
         }
@@ -74,7 +77,6 @@ let decodeOpusFrames = (buf, encoderState, id64) => {
             for(let i = 0; i < lostFrames; i++) {
                 frames.push(encoder.decodePacketloss())
             }
-
         }
 
         encoderState.seq++;
@@ -132,6 +134,7 @@ let processPckt = (buf) => {
 		case opcodes.OP_SILENCE:
             let samples = buf.readUInt16LE(readPos)
             readPos += 2;
+            encoders[id64].stream.push(Buffer.alloc(samples*2))
             console.log(`Got ${samples} silence samples`)
             break;
         case opcodes.OP_CODEC_OPUSPLC:
