@@ -117,7 +117,6 @@ let processPckt = (buf) => {
         encoders[id64].stream.pipe(input)
     }
     encoders[id64].time = Date.now()/1000
-   // console.log(`Packet header decoded from steamid64 ${id64}. LEN: ${buf.length}`)
     
     const maxRead = buf.length - 4
 
@@ -129,18 +128,15 @@ let processPckt = (buf) => {
 		case opcodes.OP_SAMPLERATE:
             let sampleRate = buf.readUInt16LE(readPos)
             readPos += 2
-           // console.log(`Decoded OP_SAMPLERATE: ${sampleRate}`)
             break;
 		case opcodes.OP_SILENCE:
             let samples = buf.readUInt16LE(readPos)
             readPos += 2;
             encoders[id64].stream.push(Buffer.alloc(samples*2))
-            console.log(`Got ${samples} silence samples`)
             break;
         case opcodes.OP_CODEC_OPUSPLC:
             let dataLen = buf.readUInt16LE(readPos)
             readPos += 2;
-            //console.log(`Decoded OP_CODEC_OPUSPLC: ${dataLen}`)
             decodeOpusFrames(buf.slice(readPos, readPos + dataLen), encoders[id64], id64)
             readPos += dataLen
             break;
@@ -184,6 +180,14 @@ client.on('ready', async () => {
     let chan = await client.channels.fetch(process.env.CHANNEL_ID)
     const conn = await chan.join()
     playOpusStream(conn.player, mixer, {}, {})
+    conn.on('ready', () => {
+        console.log('Stream ready.')
+        playOpusStream(conn.player, mixer, {}, {})
+    })
+
+    conn.on('reconnecting', () => {
+        console.log('Stream reconnecting.')
+    })
 })
 client.login(process.env.DISCORD_TOKEN)
 
