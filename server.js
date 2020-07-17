@@ -62,14 +62,10 @@ let decodeOpusFrames = (buf, encoderState, id64) => {
         }
 
         if(seq < encoderState.seq) {
-            if(seq != 0) {
-                console.log(`Out of Order seq: ${encoderState.seq}, ${seq}, ${id64}`)
-            }
             encoderState.encoder = getEncoder()
             encoderState.seq = 0
         }
         else if(encoderState.seq != seq) {
-            console.log(`Sequence mismatch: ${encoderState.seq}, ${seq}, ${id64}`)
             encoderState.seq = seq
 
             let lostFrames = Math.min(seq - encoderState.seq, 16)
@@ -105,11 +101,6 @@ let processPckt = (buf) => {
     
     let id64 = buf.readBigInt64LE(readPos)
     readPos += 8
-
-    /*if(id64 == n) {
-        i++
-        fs.writeFileSync('data/pckt_'+i+'.dat', buf)
-    }*/
 
     if(!encoders[id64]) {
         let input = createInput()
@@ -175,18 +166,21 @@ let playOpusStream = (t, stream, options, streams = {}) => {
     return dispatcher
 }
 
+let signOnChannel = async (chan) => {
+    const conn = await chan.join()
+    playOpusStream(conn.player, mixer, {}, {})
+    return conn
+}
+
 client.on('ready', async () => {
     console.log('Started discord client.');
     let chan = await client.channels.fetch(process.env.CHANNEL_ID)
-    const conn = await chan.join()
-    playOpusStream(conn.player, mixer, {}, {})
+    const conn = await signOnChannel(chan)
+    
     conn.on('ready', () => {
-        console.log('Stream ready.')
-        playOpusStream(conn.player, mixer, {}, {})
-    })
-
-    conn.on('reconnecting', () => {
-        console.log('Stream reconnecting.')
+        console.log('Resetting stream.')
+        chan.leave()
+        setTimeout(signOnChannel.bind(signOnChannel, chan), 1000)
     })
 })
 client.login(process.env.DISCORD_TOKEN)
