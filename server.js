@@ -169,19 +169,42 @@ let playOpusStream = (t, stream, options, streams = {}) => {
 let signOnChannel = async (chan) => {
     const conn = await chan.join()
     playOpusStream(conn.player, mixer, {}, {})
+
+    conn.on('ready', () => {
+        console.log('Resetting stream.')
+        chan.leave()
+        conn.disconnect()
+        setTimeout(signOnChannel.bind(signOnChannel, chan), 1000)
+    })
+
+    conn.on('disconnect', () => {
+        console.log('Disconnect even sent to stream')
+    })
+
+    conn.on('error', (err) => {
+        console.log('error even sent to stream')
+        console.log(err)
+    })
+
+    conn.on('failed', () => {
+        console.log('Failed event received')
+    })
+    
+    conn.on('reconnecting', () => {
+        console.log('Failed event received')
+    })
+
+    conn.on('warn', () => {
+        console.log('Failed event received')
+    })
+
     return conn
 }
 
 client.on('ready', async () => {
     console.log('Started discord client.');
     let chan = await client.channels.fetch(process.env.CHANNEL_ID)
-    const conn = await signOnChannel(chan)
-    
-    conn.on('ready', () => {
-        console.log('Resetting stream.')
-        chan.leave()
-        setTimeout(signOnChannel.bind(signOnChannel, chan), 1000)
-    })
+    signOnChannel(chan)
 })
 client.login(process.env.DISCORD_TOKEN)
 
@@ -205,3 +228,4 @@ server.on('listening', () => {
 })
 
 server.bind(process.env.PORT || 4000)
+process.on('unhandledRejection', err => { throw err })
