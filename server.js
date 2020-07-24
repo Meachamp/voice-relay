@@ -7,15 +7,20 @@ const server = dgram.createSocket('udp4')
 const AudioMixer = require('audio-mixer')
 const {Readable} = require('stream')
 const fs = require('fs')
+const { encode } = require('punycode')
+
+let createMixer = () => {
+    return new AudioMixer.Mixer({
+        channels: 1,
+        bitDepth: 16,
+        sampleRate: 24000,
+    //This will cause a 100ms delay between real game time and relay transmission for synchronization.
+        clearInterval: 100 
+    });
+}
 
 let encoders = {}
-let mixer = new AudioMixer.Mixer({
-    channels: 1,
-    bitDepth: 16,
-    sampleRate: 24000,
-//This will cause a 100ms delay between real game time and relay transmission for synchronization.
-    clearInterval: 100 
-});
+let mixer = createMixer()
 
 let createInput = () => {
     return mixer.input({
@@ -170,24 +175,29 @@ let signOnChannel = async (chan) => {
     const conn = await chan.join()
     playOpusStream(conn.player, mixer, {}, {})
 
-    conn.on('ready', () => {
+    conn.on('ready', async () => {
         console.log('Resetting stream.')
-        chan.leave()
-        conn.disconnect()
-        setTimeout(signOnChannel.bind(signOnChannel, chan), 1000)
+        try {
+            await chan.leave()
+        } catch {}
+        mixer = createMixer()
+        encoders = {}
+        setTimeout(signOnChannel.bind(signOnChannel, chan), 2000)
     })
 
     conn.on('disconnect', () => {
-        console.log('Disconnect even sent to stream')
+        console.log('Disconnect event sent to stream')
     })
 
     conn.on('error', (err) => {
-        console.log('error even sent to stream')
+        console.log('Error event sent to stream')
         console.log(err)
+        throw err
     })
 
     conn.on('failed', () => {
         console.log('Failed event received')
+        setTimeout(signOnChannel.bind(signOnChannel, chan), 2000)
     })
     
     conn.on('reconnecting', () => {
