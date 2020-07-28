@@ -7,7 +7,6 @@ const server = dgram.createSocket('udp4')
 const AudioMixer = require('audio-mixer')
 const {Readable} = require('stream')
 const fs = require('fs')
-const { encode } = require('punycode')
 
 let createMixer = () => {
     return new AudioMixer.Mixer({
