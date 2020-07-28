@@ -25,7 +25,7 @@ let createInput = () => {
     return mixer.input({
         channels: 1,
         sampleRate: 24000,
-        bitDepth: 1
+        bitDepth: 16
     })
 }
 
