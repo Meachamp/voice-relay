@@ -4,7 +4,7 @@ services:
     image: node:14-stretch
     volumes:
       - .:/data
-    command: bash -c 'cd /data && node /data/server.js'
+    command: bash -c 'cd /data && npm install && node /data/server.js'
     restart: always
     ports:
       - 127.0.0.1:4000:4000/udp
