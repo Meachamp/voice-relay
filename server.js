@@ -14,7 +14,7 @@ let createMixer = () => {
         bitDepth: 16,
         sampleRate: 24000,
     //This will cause a 100ms delay between real game time and relay transmission for synchronization.
-        clearInterval: 100 
+        clearInterval: 100
     });
 }
 
@@ -57,7 +57,7 @@ let decodeOpusFrames = (buf, encoderState, id64) => {
     while(readPos < maxRead - 4) {
         let len = buf.readUInt16LE(readPos)
         readPos += 2
-        
+
         let seq = buf.readUInt16LE(readPos)
         readPos += 2
 
@@ -80,8 +80,8 @@ let decodeOpusFrames = (buf, encoderState, id64) => {
         }
 
         encoderState.seq++;
-        
-        if(len <= 0 || seq < 0 || readPos + len > maxRead) { 
+
+        if(len <= 0 || seq < 0 || readPos + len > maxRead) {
             console.log(`Invalid packet LEN: ${len}, SEQ: ${seq}`)
             fs.writeFileSync('pckt_corr.dat', buf)
             return
@@ -102,7 +102,7 @@ let decodeOpusFrames = (buf, encoderState, id64) => {
 let i = 0
 let processPckt = (buf) => {
     let readPos = 0
-    
+
     let id64 = buf.readBigInt64LE(readPos)
     readPos += 8
 
@@ -112,13 +112,13 @@ let processPckt = (buf) => {
         encoders[id64].stream.pipe(input)
     }
     encoders[id64].time = Date.now()/1000
-    
+
     const maxRead = buf.length - 4
 
     while(readPos < maxRead - 1) {
         let op = buf.readUInt8(readPos)
 		readPos++
-		
+
 		switch(op) {
 		case opcodes.OP_SAMPLERATE:
             let sampleRate = buf.readUInt16LE(readPos)
@@ -145,7 +145,7 @@ let processPckt = (buf) => {
 
 let gcEncoders = () => {
     let curtime = Date.now()/1000
-    Object.keys(encoders).forEach(function (k) { 
+    Object.keys(encoders).forEach(function (k) {
         let encoderData = encoders[k]
         if(encoderData.time + 5 < curtime) {
             mixer.removeInput(encoders[k].input)
@@ -171,6 +171,9 @@ let playOpusStream = (t, stream, options, streams = {}) => {
 }
 
 let signOnChannel = async (chan) => {
+    mixer = createMixer()
+    encoders = {}
+
     const conn = await chan.join()
     playOpusStream(conn.player, mixer, {}, {})
 
@@ -179,13 +182,12 @@ let signOnChannel = async (chan) => {
         try {
             await chan.leave()
         } catch {}
-        mixer = createMixer()
-        encoders = {}
         setTimeout(signOnChannel.bind(signOnChannel, chan), 2000)
     })
 
     conn.on('disconnect', () => {
         console.log('Disconnect event sent to stream')
+        setTimeout(signOnChannel.bind(signOnChannel, chan), 2000)
     })
 
     conn.on('error', (err) => {
@@ -198,7 +200,7 @@ let signOnChannel = async (chan) => {
         console.log('Failed event received')
         setTimeout(signOnChannel.bind(signOnChannel, chan), 2000)
     })
-    
+
     conn.on('reconnecting', () => {
         console.log('Failed event received')
     })
