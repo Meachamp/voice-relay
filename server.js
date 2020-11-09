@@ -177,16 +177,8 @@ let signOnChannel = async (chan) => {
     const conn = await chan.join()
     playOpusStream(conn.player, mixer, {}, {})
 
-    conn.on('ready', async () => {
-        console.log('Resetting stream.')
-        try {
-            await chan.leave()
-        } catch {}
-        setTimeout(signOnChannel.bind(signOnChannel, chan), 2000)
-    })
-
     conn.on('disconnect', () => {
-        console.log('Disconnect event sent to stream')
+        console.log('Disconnect event sent to stream, resetting')
         setTimeout(signOnChannel.bind(signOnChannel, chan), 2000)
     })
 
@@ -196,17 +188,22 @@ let signOnChannel = async (chan) => {
         throw err
     })
 
+    conn.on('ready', () => {
+        console.log('Ready event received!')
+    })
+
     conn.on('failed', () => {
         console.log('Failed event received')
         setTimeout(signOnChannel.bind(signOnChannel, chan), 2000)
     })
 
     conn.on('reconnecting', () => {
-        console.log('Failed event received')
+        console.log('Reconnecting event received')
+        setTimeout(signOnChannel.bind(signOnChannel, chan), 2000)
     })
 
     conn.on('warn', () => {
-        console.log('Failed event received')
+        console.log('Warn event received')
     })
 
     return conn
