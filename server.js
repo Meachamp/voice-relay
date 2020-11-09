@@ -7,6 +7,7 @@ const server = dgram.createSocket('udp4')
 const AudioMixer = require('audio-mixer')
 const {Readable} = require('stream')
 const fs = require('fs')
+const cron = require('node-cron')
 
 let createMixer = () => {
     return new AudioMixer.Mixer({
@@ -237,3 +238,10 @@ server.on('listening', () => {
 
 server.bind(process.env.PORT || 4000)
 process.on('unhandledRejection', err => { throw err })
+
+//Restart at 8am
+//This is horrifying and I'm sorry.
+cron.schedule('0 0 8 * * *', () => {
+    console.log('Quitting')
+    process.exit()
+});
